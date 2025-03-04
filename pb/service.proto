@@ -1,0 +1,18 @@
+syntax = "proto3";
+option go_package = "shellie/pb";
+
+service PromptSuggestion {
+	rpc Suggest(SuggestRequest) returns (SuggestResponse) {}
+}
+
+message SuggestRequest {
+    string shell = 1;
+	repeated string commands = 2 [deprecated = true];
+	string command = 3;
+	string pwd = 4;
+	string context = 5;
+}
+
+message SuggestResponse {
+	string suggestion = 1;
+}
