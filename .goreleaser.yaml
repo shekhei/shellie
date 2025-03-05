@@ -31,9 +31,9 @@ builds:
     builder: go
     id: client
     targets:
-      - linux/amd64
-      - darwin/amd64
-      - darwin/arm64
+      - linux_amd64_v1
+      - darwin_amd64_v1
+      - darwin_arm64
     main: ./client/main.go
     binary: client
 
