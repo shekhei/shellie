@@ -24,3 +24,6 @@ go.work.sum
 # env file
 .env
 bin
+configure
+Makefile# Added by goreleaser init:
+dist/
