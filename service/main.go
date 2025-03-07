@@ -66,11 +66,10 @@ func (s *PromptSuggestionServer) Suggest(ctx context.Context, req *pb.SuggestReq
 			openai.UserMessage(fmt.Sprintf("Shell environment: %s", req.GetShell())),
 			openai.UserMessage(fmt.Sprintf("Context:\n%s", req.GetContext())),
 			openai.UserMessage("Do not wrap the json codes in JSON markers"),
-			openai.UserMessage(fmt.Sprintf("Suggest completions for this partial command: %s", req.GetCommand())),
+			openai.UserMessage(fmt.Sprintf("Suggest completions that starts with '%s'", req.GetCommand())),
 		}),
 		Model: openai.F(s.config.Service.Model),
 	}
-	log.Println("model: ", s.config.Service.Model)
 	chatCompletion, err := client.Chat.Completions.New(ctx, reqParams)
 	if err != nil {
 		return nil, err

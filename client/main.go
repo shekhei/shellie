@@ -28,6 +28,7 @@ func verifyConfig(config common.ClientConfig) error {
 }
 
 func main() {
+	flag.Parse()
 	// gets a list of command from stdin, newline denotes a new command
 	// the last command is the command that the user is currently entering
 	config, err := common.ReadOrCreateConfig()
@@ -62,6 +63,7 @@ func main() {
 	}
 	defer conn.Close()
 	client := pb.NewPromptSuggestionClient(conn)
+	log.Printf("shell (%s), command (%s), pwd (%s)", *shell, *command, *pwd)
 	response, err := client.Suggest(context.Background(), &pb.SuggestRequest{
 		Shell:   *shell,
 		Context: ctxInput,
