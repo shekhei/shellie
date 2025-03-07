@@ -6,33 +6,27 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"os"
+	"os/signal"
+	"shellie/common"
 	"shellie/pb"
 	"strings"
+	"syscall"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"google.golang.org/grpc"
 )
 
-type Config struct {
-	OpenAIEndpoint string `toml:"openai_endpoint"`
-	APIKey         string `toml:"api_key"`
-	Organization   string `toml:"organization"`
-	Project        string `toml:"project"`
-	Model          string `toml:"model"`
-}
-
 var client *openai.Client
-var config Config
 
-func verifyConfig(config Config) error {
+func verifyConfig(config common.ServiceConfig) error {
 	if config.APIKey == "" {
 		return fmt.Errorf("API key is not set")
 	}
-	if config.OpenAIEndpoint == "" {
+	if config.ChatCompletionEndpoint == "" {
 		return fmt.Errorf("OpenAI endpoint is not set")
 	}
 	if config.Model == "" {
@@ -45,6 +39,7 @@ func verifyConfig(config Config) error {
 
 type PromptSuggestionServer struct {
 	pb.UnimplementedPromptSuggestionServer
+	config *common.Config
 }
 
 type Suggestion struct {
@@ -73,9 +68,10 @@ func (s *PromptSuggestionServer) Suggest(ctx context.Context, req *pb.SuggestReq
 			openai.UserMessage("Do not wrap the json codes in JSON markers"),
 			openai.UserMessage(fmt.Sprintf("Suggest completions for this partial command: %s", req.GetCommand())),
 		}),
-		Model: openai.F(config.Model),
+		Model: openai.F(s.config.Service.Model),
 	}
-	chatCompletion, err := client.Chat.Completions.New(context.TODO(), reqParams)
+	log.Println("model: ", s.config.Service.Model)
+	chatCompletion, err := client.Chat.Completions.New(ctx, reqParams)
 	if err != nil {
 		return nil, err
 	}
@@ -96,45 +92,52 @@ func (s *PromptSuggestionServer) Suggest(ctx context.Context, req *pb.SuggestReq
 	}, nil
 }
 func main() {
-	// Read config from ~/.config/promptsuggestion.json
-	HOME := os.Getenv("HOME")
-	// create default config
-	// check if ~/.config/promptsuggestion.json exists
-	if _, err := os.Stat(fmt.Sprintf("%s/.config/promptsuggestion.toml", HOME)); os.IsNotExist(err) {
-		config := Config{
-			OpenAIEndpoint: "https://api.openai.com/v1",
-		}
-		content, err := toml.Marshal(config)
-		if err != nil {
-			panic(err.Error())
-		}
-		os.WriteFile(fmt.Sprintf("%s/.config/promptsuggestion.toml", HOME), content, 0644)
-	}
-	configBytes, err := os.ReadFile(fmt.Sprintf("%s/.config/promptsuggestion.toml", HOME))
+	config, err := common.ReadOrCreateConfig()
 	if err != nil {
 		panic(err.Error())
 	}
-	if err := toml.Unmarshal(configBytes, &config); err != nil {
-		panic(err.Error())
-	}
-	if err := verifyConfig(config); err != nil {
+	if err := verifyConfig(config.Service); err != nil {
 		panic(err.Error())
 	}
 	fmt.Println("Creating client using config: ", config)
 	client = openai.NewClient(
-		option.WithAPIKey(config.APIKey),
-		option.WithBaseURL(config.OpenAIEndpoint),
-		option.WithProject(config.Project),
-		option.WithOrganization(config.Organization),
+		option.WithAPIKey(config.Service.APIKey),
+		option.WithBaseURL(config.Service.ChatCompletionEndpoint),
+		option.WithProject(config.Service.Project),
+		option.WithOrganization(config.Service.Organization),
 	)
 	grpcServer := grpc.NewServer()
-	lis, err := net.Listen("unix", "/tmp/promptsuggestion.sock")
-	defer func() {
-		os.Remove("/tmp/promptsuggestion.sock")
-	}()
+	u, err := url.Parse(config.Service.ListenAddress)
 	if err != nil {
 		panic(err.Error())
 	}
-	pb.RegisterPromptSuggestionServer(grpcServer, &PromptSuggestionServer{})
-	grpcServer.Serve(lis)
+	scheme := u.Scheme
+	log.Printf("Listening on %s %s", scheme, u.Host)
+	var lis net.Listener
+	if scheme != "unix" && scheme != "http" {
+		panic(fmt.Errorf("invalid scheme: %s, only supports unix or http", scheme))
+	}
+	if scheme == "unix" {
+		lis, err = net.Listen("unix", u.Path)
+	} else {
+		lis, err = net.Listen("tcp", u.Host)
+	}
+	if err != nil {
+		panic(err.Error())
+	}
+	defer lis.Close()
+	pb.RegisterPromptSuggestionServer(grpcServer, &PromptSuggestionServer{
+		config: config,
+	})
+	go func() {
+		grpcServer.Serve(lis)
+	}()
+	// Use a buffered channel so we don't miss any signals
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	// Block until a signal is received.
+	s := <-c
+	fmt.Println("Got signal:", s)
+	grpcServer.Stop()
 }

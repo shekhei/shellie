@@ -2,7 +2,7 @@
 set +x
 # --- Begin Custom Inline Next Command Suggestion for Bash ---
 SCRIPT_DIR=${BASH_SOURCE%/*}
-CLIENT_BIN="$SCRIPT_DIR/bin/client"
+CLIENT_BIN="$SCRIPT_DIR/shellie-client"
 # Function to generate a suggestion based on the last command in history.
 generate_next_command_suggestion() {
   # Get the last command from history.

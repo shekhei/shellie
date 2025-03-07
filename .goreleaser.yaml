@@ -25,7 +25,7 @@ builds:
       - darwin_amd64_v1
       - darwin_arm64
     main: ./service/main.go
-    binary: service
+    binary: shellie-service
   - env:
       - CGO_ENABLED=0
     builder: go
@@ -35,7 +35,7 @@ builds:
       - darwin_amd64_v1
       - darwin_arm64
     main: ./client/main.go
-    binary: client
+    binary: shellie-client
 
 archives:
   - formats: ["tar.gz"]
@@ -47,6 +47,10 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - shellie.bash
 
 changelog:
   sort: asc
